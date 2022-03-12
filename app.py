@@ -1,12 +1,27 @@
-from flask import Flask
+# export FLASK_ENV=development
+# flask run --port 4000
+from tabnanny import check
+from flask import Flask, request, make_response, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from passlib.apps import custom_app_context
 from datetime import datetime
-
+from flask_httpauth import HTTPBasicAuth
 from sqlalchemy import ForeignKey
+
+from werkzeug.security import generate_password_hash, check_password_hash
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///watch_list.db'
 db = SQLAlchemy(app)
+
+auth = HTTPBasicAuth()
+
+
+@auth.verify_password
+def verify_auth(username, password):
+    current_user = User.query.filter_by(name=username).first()
+    # if current_user and password == current_user.password_hash:
+    if current_user and check_password_hash(current_user.password_hash, password):
+        return current_user
 
 
 class User(db.Model):
@@ -20,16 +35,12 @@ class User(db.Model):
     name = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(64))
+    # private public status
     ppstatus = db.Column(db.Boolean(), default=False, nullable=False)
     score = db.Column(db.Integer(), default=0, nullable=False)
 
     last_status = db.relationship('MovieUser', back_populates='user')
 
-#     def hash_password(self, password):
-#         self.password_hash = custom_app_context.encrypt(password)
-
-#     def verify_password(self, password):
-#         return custom_app_context.verify(password, self.password_hash)
     def __repr__(self):
         return f'<{self.id}:{self.name}>'
 
@@ -79,7 +90,7 @@ class Movie(db.Model):
         id name picture
     """
     id = db.Column(db.Integer(), primary_key=True)
-    name = db.Column(db.String(80), nullable=False)
+    name = db.Column(db.String(80), nullable=False, unique=True)
 
     info = db.relationship("MovieInfo", back_populates='movie')
     last_status = db.relationship('MovieUser', back_populates='movie')
@@ -190,10 +201,105 @@ Out[35]: <1:yousef>
 """
 
 
+@auth.error_handler
+def auth_error(status):
+    res = make_response(jsonify({'actual_status_code': status}), 403)
+    return res
+
+
 @app.route('/')
 def index():
     return 'descriptions of API endpoints'
 
 
+@app.route('/api/movielist/v1.1/<string:username>')
+@auth.login_required
+def home_page(username):
+    return f'hello, {auth.current_user()}'
+
+
+@app.route('/api/movielist/v1.1/register', methods=['post'])
+def register():
+    # TODO add email verification
+    # curl -X POST -H 'content-type: application/json' -d '{"name":"yosuef", "password":"this is my password keep it safe", "email":"jooo3@gmail.com"}' 'http://localhost:4000/api/movielist/v1.1/register'
+
+    req = request.get_json()
+    name, email, password = req['name'], req['email'], req['password']
+    new_user = User(name=name, email=email,
+                    password_hash=generate_password_hash(password))
+
+    db.session.add(new_user)
+    db.session.commit()
+    return {"status": 'created'}
+
+
+@app.route('/api/movielist/v1.1/addmovie', methods=['POST'])
+@auth.login_required
+def addmovie():
+    # curl -u u1:u1 -X POST -H 'content-type: application/json'
+    # -d '{"name":"movie1", "details":"[6,5,10]"}'
+    # 'http://localhost:4000/api/movielist/v1.1/addmovie'
+
+    req = request.get_json()
+    name, details = req['name'], req['details']
+
+    new_movie = Movie(name=name)
+    for season, episodeCount in enumerate(details):
+        new_movie.info.append(MovieInfo(season=season, episode=episodeCount))
+
+    current_user = auth.current_user()
+
+    new_movie_user = MovieUser(
+        watched_season=0, watched_episode=0, movie=new_movie)
+    current_user.last_status.append(new_movie_user)
+
+    new_movie_user_log = MovieUserLog(current_season=0, current_episode=0)
+    new_movie_user.logs.append(new_movie_user_log)
+
+    db.session.add(new_movie)
+    db.session.commit()
+    import pdb
+    pdb.set_trace()
+    return 'ohh'
+
+
+@app.route('/api/movielist/v1.1/signin')
+@auth.login_required
+def signin():
+    #     ➜  ~ curl -u u1:u1 http://localhost:4000/api/movielist/v1.1/signin
+    # {
+    #   "name": "u1"
+    # }
+    user = auth.current_user()
+    return {'name': user.name}
+
+    # curl -X POST -H 'content-type: application/json' -d '{"name":"yousef", "password":"1234"}' 'http://localhost:4000/api/movielist/v1.1/signin'
+    #  {
+    #    "authenticated": false
+    #  }
+
+    # req = request.get_json()
+    # name, password = req['name'], req['password']
+    # try:
+    #     user_record = User.query.filter_by(name=name).first()
+    #     if check_password_hash(user_record.password_hash, password):
+    #         return {'is_authenticated': True}
+    #     return {'is_authenticated': False}
+    # except:
+    #     return {'is_authenticated': False}
+
+
+@app.route('/api/movielist/v1.1/movies', methods=['GET'])
+@auth.login_required
+def get_movies():
+    pass
+
+
+@app.route('/api/movielist/v1.1/movies/<int:movie_id>', methods=['GET'])
+def get_movie(movie_id):
+    if request.method == 'POST':
+        pass
+
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, )
