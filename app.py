@@ -1,5 +1,7 @@
 # export FLASK_ENV=development
 # flask run --port 4000
+
+import functools
 from tabnanny import check
 from flask import Flask, request, make_response, jsonify
 from flask_sqlalchemy import SQLAlchemy
@@ -221,7 +223,7 @@ def home_page(username):
 @app.route('/api/movielist/v1.1/register', methods=['post'])
 def register():
     # TODO add email verification
-    # curl -X POST -H 'content-type: application/json' -d '{"name":"yosuef", "password":"this is my password keep it safe", "email":"jooo3@gmail.com"}' 'http://localhost:4000/api/movielist/v1.1/register'
+    # curl -X POST -H 'content-type: application/json' -d '{"name":"name", "password":"password", "email":"jooo3@gmail.com"}' 'http://localhost:4000/api/movielist/v1.1/register'
 
     req = request.get_json()
     name, email, password = req['name'], req['email'], req['password']
@@ -258,9 +260,69 @@ def addmovie():
 
     db.session.add(new_movie)
     db.session.commit()
-    import pdb
-    pdb.set_trace()
-    return 'ohh'
+
+    return {'status': 'movie added!'}
+
+
+@app.route('/api/movielist/v1.1/getmovies', methods=['GET'])
+@auth.login_required
+def getmovie():
+    # curl -u name:password 'http://localhost:4000/api/movielist/v1.1/getmovies'
+
+    current_user = auth.current_user()
+
+    def destruct_movie_user(movie_user):
+        user_id = movie_user.user_id
+        movie_id = movie_user.movie_id
+        s = movie_user.watched_season
+        e = movie_user.watched_episode
+        movie = movie_user.movie
+
+        movie_name = movie.name
+        movie_info = [(i.season, i.episode) for i in movie.info]
+        # double check that returned movie.info list is sorted and next value is plused one :
+
+        return {'user_id': user_id, 'movie_id': movie_id, 'name': movie_name, 'current_season': s, 'current_episode': e, 'movie_info': movie_info}
+
+    current_user_movies = [destruct_movie_user(m)
+                           for m in current_user.last_status]
+    # !TODO
+    # expected return : 
+    # a dict like :movie_id :{'season':0, 'episode':0, 'watch_time':0}, ... }
+    return {"data": current_user_movies}
+
+@app.route('/api/movielist/v1.1/log', methods=['GET', 'POST'])
+@auth.login_required
+def log():
+    # curl -u name:password 'http://localhost:4000/api/movielist/v1.1/log'
+    if request.method == 'GET':
+        def destruct_movie_user_log(movie_user_log):
+            user_id = movie_user_log.user_id
+            movie_id = movie_user_log.movie_id
+            watch_time = movie_user_log.watch_time
+            season = movie_user_log.current_season
+            episode = movie_user_log.current_episode
+            return {'user_id':user_id, 'movie_id':movie_id,
+            'season':season,'episode':episode, 'watch_time':watch_time}
+
+        log = MovieUserLog.query.filter_by(user_id=auth.current_user().id).all()
+        log = [destruct_movie_user_log(item) for item in log]
+
+        def reshape_log(a,b):
+            key = b['movie_id']
+            print(key)
+            if key not in a:
+                a[key]=[]
+            a[key].append({'season':b['season'], 
+                            'episode':b['episode'],
+                            'watch_time':b['watch_time']})
+            return a
+
+        result = functools.reduce(reshape_log, log,{})
+
+    # expected return : 
+    # a dict like :movie_id :[{'season':0, 'episode':0, 'watch_time':0}, ... ]}
+    return result
 
 
 @app.route('/api/movielist/v1.1/signin')
