@@ -54,6 +54,8 @@ class MovieUser(db.Model):
     movie_id = db.Column(db.Integer(), db.ForeignKey(
         "movies.id"), primary_key=True)
 
+    # TODO! there is no need to these two column
+    # for now set theme to zero
     watched_season = db.Column(db.Integer(), nullable=False)
     watched_episode = db.Column(db.Integer(), nullable=False)
 
@@ -79,7 +81,7 @@ class MovieUserLog(db.Model):
     user_id = db.Column(db.Integer(), nullable=False)
     movie_id = db.Column(db.Integer(), nullable=False)
     watch_time = db.Column(db.DateTime(), default=datetime.utcnow)
-
+    # TODO: change name of these columns to watched_
     current_season = db.Column(db.Integer(), nullable=False)
     current_episode = db.Column(db.Integer(), nullable=False)
 
@@ -119,84 +121,87 @@ class MovieInfo(db.Model):
 
 
 """
-In [4]: from app import User, Movie, MovieUser, MovieInfo,MovieUserLog, db                                                                                                               
+In [4]: from app import User, Movie, MovieUser, MovieInfo,MovieUserLog, db
 
-In [5]: u1 = User(name='yousef', email='usf.stdd@gmail.com', password_hash='password_hash')                                                             
+In [5]: u1 = User(name='yousef', email='usf.stdd@gmail.com',
+                  password_hash='password_hash')
 
-In [6]: db.session.add(u1)                                                      
+In [6]: db.session.add(u1)
 
-In [7]: db.session.commit()                                                     
+In [7]: db.session.commit()
 
-In [8]: m1 = Movie(name='matrix')                                               
+In [8]: m1 = Movie(name='matrix')
 
-In [9]: db.session.new                                                          
+In [9]: db.session.new
 Out[9]: IdentitySet([])
 
-In [10]: db.session.add(m1)                                                     
+In [10]: db.session.add(m1)
 
-In [11]: db.session.new                                                         
+In [11]: db.session.new
 Out[11]: IdentitySet([<None:matrix>])
 
-In [12]: db.session.commit()                                                    
+In [12]: db.session.commit()
 
-In [13]: m1                                                                     
+In [13]: m1
 Out[13]: <1:matrix>
 
-In [18]: mu = MovieUser(user=u1, movie=m1, watched_season=0, watched_episode=0 )  
+In [18]: mu = MovieUser(
+    user=u1, movie=m1, watched_season=0, watched_episode=0 )
 
-In [11]: mu                                                                     
+In [11]: mu
 Out[11]: <user-movie:None-None,<1:matrix>, season:0, episode:0 watched.>
 
-In [12]: m1                                                                     
+In [12]: m1
 Out[12]: <1:matrix>
 
-In [13]: db.session.add(mu)                                                     
+In [13]: db.session.add(mu)
 
-In [14]: db.session.commit()                                                    
+In [14]: db.session.commit()
 
-In [15]: db.session.new                                                         
+In [15]: db.session.new
 Out[15]: IdentitySet([])
 
-In [16]: u1                                                                     
+In [16]: u1
 Out[16]: <1:yousef>
 
-In [17]: u1.last_status                                                         
+In [17]: u1.last_status
 Out[17]: [<user-movie:1-1,<1:matrix>, season:0, episode:0 watched.>]
 
-In [19]: mu.movie                                                               
+In [19]: mu.movie
 Out[19]: <1:matrix>
 
-In [20]: mu                                                                     
+In [20]: mu
 Out[20]: <user-movie:1-1,<1:matrix>, season:0, episode:0 watched.>
 
-In [21]: type(mu)                                                               
+In [21]: type(mu)
 Out[21]: app.MovieUser
 
-In [22]: u1.last_status                                                         
+In [22]: u1.last_status
 Out[22]: [<user-movie:1-1,<1:matrix>, season:0, episode:0 watched.>]
 
-In [26]: type(u1.last_status[0])                                                
+In [26]: type(u1.last_status[0])
 Out[26]: app.MovieUser
 
-In [27]: u1.last_status[0].movie                                                
+In [27]: u1.last_status[0].movie
 Out[27]: <1:matrix>
 
-In [29]: mulog = MovieUserLog(last_status=mu, current_season=1, current_episode=1)                                                                     
+In [29]: mulog = MovieUserLog(
+    last_status=mu, current_season=1, current_episode=1)
 
-In [30]: mulog                                                                  
+In [30]: mulog
 Out[30]: <MovieUserLog (transient 139832421025440)>
 
-In [31]: db.session.add(mulog)                                                  
+In [31]: db.session.add(mulog)
 
-In [32]: db.session.new                                                         
+In [32]: db.session.new
 Out[32]: IdentitySet([<MovieUserLog (transient 139832409596160)>, <MovieUserLog (transient 139832421025440)>])
 
-In [33]: db.session.commit()                                                                                                              
+In [33]: db.session.commit()
 
-In [34]: mulog.last_status                                                                                                                
+In [34]: mulog.last_status
 Out[34]: <user-movie:1-1,<1:matrix>, season:0, episode:0 watched.>
 
-In [35]: mulog.last_status.user                                                                                                           
+In [35]: mulog.last_status.user
 Out[35]: <1:yousef>
 
 
@@ -252,10 +257,10 @@ def addmovie():
     current_user = auth.current_user()
 
     new_movie_user = MovieUser(
-        watched_season=0, watched_episode=0, movie=new_movie)
+        watched_season=-1, watched_episode=-1, movie=new_movie)
     current_user.last_status.append(new_movie_user)
 
-    new_movie_user_log = MovieUserLog(current_season=0, current_episode=0)
+    new_movie_user_log = MovieUserLog(current_season=-1, current_episode=-1)
     new_movie_user.logs.append(new_movie_user_log)
 
     db.session.add(new_movie)
@@ -264,65 +269,103 @@ def addmovie():
     return {'status': 'movie added!'}
 
 
-@app.route('/api/movielist/v1.1/getmovies', methods=['GET'])
+@app.route('/api/movielist/v1.1/movieslog', methods=['GET', 'POST'])
 @auth.login_required
 def getmovie():
-    # curl -u name:password 'http://localhost:4000/api/movielist/v1.1/getmovies'
+    # curl -u name:password 'http://localhost:4000/api/movielist/v1.1/movieslog'
 
     current_user = auth.current_user()
 
     def destruct_movie_user(movie_user):
         user_id = movie_user.user_id
         movie_id = movie_user.movie_id
-        s = movie_user.watched_season
-        e = movie_user.watched_episode
+        # s = movie_user.watched_season
+        # e = movie_user.watched_episode
         movie = movie_user.movie
-
+        note = movie_user.note
         movie_name = movie.name
-        movie_info = [(i.season, i.episode) for i in movie.info]
-        # double check that returned movie.info list is sorted and next value is plused one :
+        season_episode_details = [(i.season, i.episode) for i in movie.info]
+        # TODO! question: i which order the value retrived from the db.
+        return {'user_id': user_id, 'movie_id': movie_id, 'name': movie_name,
+                'season_episode_details': season_episode_details, 'note': note}
 
-        return {'user_id': user_id, 'movie_id': movie_id, 'name': movie_name, 'current_season': s, 'current_episode': e, 'movie_info': movie_info}
+    def destruct_movie_user_log(movie_user_log):
+        user_id = movie_user_log.user_id
+        movie_id = movie_user_log.movie_id
+        watch_time = movie_user_log.watch_time
+        season = movie_user_log.current_season
+        episode = movie_user_log.current_episode
+        return {'user_id': user_id, 'movie_id': movie_id,
+                'season': season, 'episode': episode, 'watch_time': watch_time}
 
-    current_user_movies = [destruct_movie_user(m)
-                           for m in current_user.last_status]
-    # !TODO
-    # expected return : 
-    # a dict like :movie_id :{'season':0, 'episode':0, 'watch_time':0}, ... }
-    return {"data": current_user_movies}
-
-@app.route('/api/movielist/v1.1/log', methods=['GET', 'POST'])
-@auth.login_required
-def log():
-    # curl -u name:password 'http://localhost:4000/api/movielist/v1.1/log'
     if request.method == 'GET':
-        def destruct_movie_user_log(movie_user_log):
-            user_id = movie_user_log.user_id
-            movie_id = movie_user_log.movie_id
-            watch_time = movie_user_log.watch_time
-            season = movie_user_log.current_season
-            episode = movie_user_log.current_episode
-            return {'user_id':user_id, 'movie_id':movie_id,
-            'season':season,'episode':episode, 'watch_time':watch_time}
+        watchlist = [destruct_movie_user(m)
+                     for m in current_user.last_status]
+        # !TODO
+        # expected return :
+        # a dict like :movie_id :{'season':0, 'episode':0, 'watch_time':0}, ... }
 
-        log = MovieUserLog.query.filter_by(user_id=auth.current_user().id).all()
-        log = [destruct_movie_user_log(item) for item in log]
+        def reshape_watchlist(a, b):
+            key = b['movie_id']
+            a[key] = {'name': b['name'],
+                      'season_episode_details': b['season_episode_details'],
+                      'note': b['note']}
 
-        def reshape_log(a,b):
+            return a
+
+        reshaped_watchlist = functools.reduce(reshape_watchlist, watchlist, {})
+
+        user_log = MovieUserLog.query.filter_by(
+            user_id=auth.current_user().id).all()
+        log = [destruct_movie_user_log(m) for m in user_log]
+
+        def reshape_log(a, b):
             key = b['movie_id']
             print(key)
             if key not in a:
-                a[key]=[]
-            a[key].append({'season':b['season'], 
-                            'episode':b['episode'],
-                            'watch_time':b['watch_time']})
+                a[key] = []
+            a[key].append({'season': b['season'],
+                           'episode': b['episode'],
+                           'watch_time': b['watch_time']})
             return a
 
-        result = functools.reduce(reshape_log, log,{})
+        reshaped_log = functools.reduce(reshape_log, log, {})
 
-    # expected return : 
+        return {"watchlist": reshaped_watchlist, "watchlist_log": reshaped_log}
+
+
+# @app.route('/api/movielist/v1.1/log', methods=['GET', 'POST'])
+# @auth.login_required
+# def log():
+    # curl -u name:password 'http://localhost:4000/api/movielist/v1.1/log'
+    # if request.method == 'GET':
+
+    #     log = MovieUserLog.query.filter_by(
+    #         user_id=auth.current_user().id).all()
+    #     log = [ for item in log]
+
+    # expected return :
     # a dict like :movie_id :[{'season':0, 'episode':0, 'watch_time':0}, ... ]}
-    return result
+    #     return result
+    # if request.method == "POST":
+    #     '''
+    #     curl -u u1:u1 -X POST -H 'content-type: application/json'
+    #     -d '{"movie_id":"3", "current_season": , "current_episode": }'
+    #     'http://localhost:4000/api/movielist/v1.1/log'
+    #     '''
+    #     request_body = request.get_json()
+    #     user = auth.current_user()
+    #     movie_user = MovieUser.query.filter_by(
+    #         user=user, movie_id=request_body['movie_id']).first()
+    #     movie_user.watched_season = request_body['current_season']
+    #     movie_user.watched_episode = request_body['current_episode']
+    #     log = MovieUserLog(user_id=user.id, movie_id=request_body['movie_id'],
+    #                        current_season=request_body['current_season'], current_episode=request_body['current_episode'])
+    #     db.session.add(movie_user)
+    #     db.session.add(log)
+    #     db.session.commit()
+    #     return {'status': 'done'}
+    # pass
 
 
 @app.route('/api/movielist/v1.1/signin')
