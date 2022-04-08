@@ -10,7 +10,9 @@ from datetime import datetime
 from flask_httpauth import HTTPBasicAuth
 from sqlalchemy import ForeignKey
 
+
 from werkzeug.security import generate_password_hash, check_password_hash
+import re
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///watch_list.db'
 db = SQLAlchemy(app)
@@ -86,6 +88,7 @@ class MovieUserLog(db.Model):
     current_episode = db.Column(db.Integer(), nullable=False)
 
     last_status = db.relationship('MovieUser', back_populates='logs')
+    # TODO: problem: same movie user season episode can be commited!
 
 
 class Movie(db.Model):
@@ -118,94 +121,6 @@ class MovieInfo(db.Model):
 
     def __repr__(self):
         return f'<{self.id}:{self.season}, {self.episode}>'
-
-
-"""
-In [4]: from app import User, Movie, MovieUser, MovieInfo,MovieUserLog, db
-
-In [5]: u1 = User(name='yousef', email='usf.stdd@gmail.com',
-                  password_hash='password_hash')
-
-In [6]: db.session.add(u1)
-
-In [7]: db.session.commit()
-
-In [8]: m1 = Movie(name='matrix')
-
-In [9]: db.session.new
-Out[9]: IdentitySet([])
-
-In [10]: db.session.add(m1)
-
-In [11]: db.session.new
-Out[11]: IdentitySet([<None:matrix>])
-
-In [12]: db.session.commit()
-
-In [13]: m1
-Out[13]: <1:matrix>
-
-In [18]: mu = MovieUser(
-    user=u1, movie=m1, watched_season=0, watched_episode=0 )
-
-In [11]: mu
-Out[11]: <user-movie:None-None,<1:matrix>, season:0, episode:0 watched.>
-
-In [12]: m1
-Out[12]: <1:matrix>
-
-In [13]: db.session.add(mu)
-
-In [14]: db.session.commit()
-
-In [15]: db.session.new
-Out[15]: IdentitySet([])
-
-In [16]: u1
-Out[16]: <1:yousef>
-
-In [17]: u1.last_status
-Out[17]: [<user-movie:1-1,<1:matrix>, season:0, episode:0 watched.>]
-
-In [19]: mu.movie
-Out[19]: <1:matrix>
-
-In [20]: mu
-Out[20]: <user-movie:1-1,<1:matrix>, season:0, episode:0 watched.>
-
-In [21]: type(mu)
-Out[21]: app.MovieUser
-
-In [22]: u1.last_status
-Out[22]: [<user-movie:1-1,<1:matrix>, season:0, episode:0 watched.>]
-
-In [26]: type(u1.last_status[0])
-Out[26]: app.MovieUser
-
-In [27]: u1.last_status[0].movie
-Out[27]: <1:matrix>
-
-In [29]: mulog = MovieUserLog(
-    last_status=mu, current_season=1, current_episode=1)
-
-In [30]: mulog
-Out[30]: <MovieUserLog (transient 139832421025440)>
-
-In [31]: db.session.add(mulog)
-
-In [32]: db.session.new
-Out[32]: IdentitySet([<MovieUserLog (transient 139832409596160)>, <MovieUserLog (transient 139832421025440)>])
-
-In [33]: db.session.commit()
-
-In [34]: mulog.last_status
-Out[34]: <user-movie:1-1,<1:matrix>, season:0, episode:0 watched.>
-
-In [35]: mulog.last_status.user
-Out[35]: <1:yousef>
-
-
-"""
 
 
 @auth.error_handler
@@ -243,30 +158,46 @@ def register():
 @app.route('/api/movielist/v1.1/addmovie', methods=['POST'])
 @auth.login_required
 def addmovie():
-    # curl -u u1:u1 -X POST -H 'content-type: application/json'
-    # -d '{"name":"movie1", "details":"[6,5,10]"}'
-    # 'http://localhost:4000/api/movielist/v1.1/addmovie'
+    # curl -u u1:u1 -X POST -H 'content-type: application/json' -d '{"name":"movie1", "details":"[6,5,10]"}' 'http://localhost:4000/api/movielist/v1.1/addmovie'
 
     req = request.get_json()
-    name, details = req['name'], req['details']
-
-    new_movie = Movie(name=name)
-    for season, episodeCount in enumerate(details):
-        new_movie.info.append(MovieInfo(season=season, episode=episodeCount))
-
     current_user = auth.current_user()
 
-    new_movie_user = MovieUser(
-        watched_season=-1, watched_episode=-1, movie=new_movie)
-    current_user.last_status.append(new_movie_user)
+    if 'details' in req:
+        name, details = req['name'], req['details']
 
-    new_movie_user_log = MovieUserLog(current_season=-1, current_episode=-1)
-    new_movie_user.logs.append(new_movie_user_log)
+        new_movie = Movie(name=name)
+        for season, episodeCount in enumerate(details):
+            new_movie.info.append(
+                MovieInfo(season=season, episode=episodeCount))
 
-    db.session.add(new_movie)
-    db.session.commit()
+        new_movie_user = MovieUser(
+            watched_season=-1, watched_episode=-1, movie=new_movie)
+        current_user.last_status.append(new_movie_user)
 
-    return {'status': 'movie added!'}
+        new_movie_user_log = MovieUserLog(
+            current_season=-1, current_episode=-1)
+
+        new_movie_user.logs.append(new_movie_user_log)
+
+        db.session.add(new_movie)
+        db.session.commit()
+
+        return {'status': 'movie added!'}
+    elif 'movie_id' in req:
+        movie_id = req['movie_id']
+        print(movie_id)
+        new_movie_user = MovieUser(
+            user_id=current_user.id, movie_id=movie_id, watched_season=-1, watched_episode=-1)
+
+        new_movie_user_log = MovieUserLog(
+            current_season=-1, current_episode=-1)
+
+        new_movie_user.logs.append(new_movie_user_log)
+        db.session.add(new_movie_user)
+        db.session.commit()
+
+        return {'status': 'movie added!'}
 
 
 @app.route('/api/movielist/v1.1/movieslog', methods=['GET', 'POST'])
@@ -301,7 +232,7 @@ def getmovie():
     if request.method == 'GET':
         watchlist = [destruct_movie_user(m)
                      for m in current_user.last_status]
-        # !TODO
+        # !TODO: done!
         # expected return :
         # a dict like :movie_id :{'season':0, 'episode':0, 'watch_time':0}, ... }
 
@@ -332,40 +263,31 @@ def getmovie():
         reshaped_log = functools.reduce(reshape_log, log, {})
 
         return {"watchlist": reshaped_watchlist, "watchlist_log": reshaped_log}
+    if request.method == "POST":
+        '''
+        curl -u u1:u1 -X POST -H 'content-type: application/json'
+        -d '{"movie_id":"3", "watched_season":"3" , "watched_episode":"2" }'
+        'http://localhost:4000/api/movielist/v1.1/movieslog'
 
 
-# @app.route('/api/movielist/v1.1/log', methods=['GET', 'POST'])
-# @auth.login_required
-# def log():
-    # curl -u name:password 'http://localhost:4000/api/movielist/v1.1/log'
-    # if request.method == 'GET':
+        curl -u name:password -X POST -H 'content-type: application/json' -d '{"movie_id":"3", "watched_season":"3" , "watched_episode":"2" }' 'http://localhost:4000/api/movielist/v1.1/movieslog'
 
-    #     log = MovieUserLog.query.filter_by(
-    #         user_id=auth.current_user().id).all()
-    #     log = [ for item in log]
+        '''
+        request_body = request.get_json()
+        user = auth.current_user()
+        # TODO! redundant. in addmovie route -1 was set.
+        # movie_user = MovieUser.query.filter_by(
+        #     user=user, movie_id=request_body['movie_id']).first()
 
-    # expected return :
-    # a dict like :movie_id :[{'season':0, 'episode':0, 'watch_time':0}, ... ]}
-    #     return result
-    # if request.method == "POST":
-    #     '''
-    #     curl -u u1:u1 -X POST -H 'content-type: application/json'
-    #     -d '{"movie_id":"3", "current_season": , "current_episode": }'
-    #     'http://localhost:4000/api/movielist/v1.1/log'
-    #     '''
-    #     request_body = request.get_json()
-    #     user = auth.current_user()
-    #     movie_user = MovieUser.query.filter_by(
-    #         user=user, movie_id=request_body['movie_id']).first()
-    #     movie_user.watched_season = request_body['current_season']
-    #     movie_user.watched_episode = request_body['current_episode']
-    #     log = MovieUserLog(user_id=user.id, movie_id=request_body['movie_id'],
-    #                        current_season=request_body['current_season'], current_episode=request_body['current_episode'])
-    #     db.session.add(movie_user)
-    #     db.session.add(log)
-    #     db.session.commit()
-    #     return {'status': 'done'}
-    # pass
+        # movie_user.watched_season = request_body['current_season']
+        # movie_user.watched_episode = request_body['current_episode']
+        # db.session.add(movie_user)
+        log = MovieUserLog(user_id=user.id, movie_id=request_body['movie_id'],
+                           current_season=request_body['watched_season'], current_episode=request_body['watched_episode'])
+
+        db.session.add(log)
+        db.session.commit()
+        return {'watch_time': log.watch_time}
 
 
 @app.route('/api/movielist/v1.1/signin')
@@ -378,26 +300,34 @@ def signin():
     user = auth.current_user()
     return {'name': user.name}
 
-    # curl -X POST -H 'content-type: application/json' -d '{"name":"yousef", "password":"1234"}' 'http://localhost:4000/api/movielist/v1.1/signin'
-    #  {
-    #    "authenticated": false
-    #  }
 
-    # req = request.get_json()
-    # name, password = req['name'], req['password']
-    # try:
-    #     user_record = User.query.filter_by(name=name).first()
-    #     if check_password_hash(user_record.password_hash, password):
-    #         return {'is_authenticated': True}
-    #     return {'is_authenticated': False}
-    # except:
-    #     return {'is_authenticated': False}
-
-
-@app.route('/api/movielist/v1.1/movies', methods=['GET'])
+@app.route('/api/movielist/v1.1/movies', methods=['POST'])
 @auth.login_required
 def get_movies():
-    pass
+    # curl -u name:password -X POST -H 'content-type: application/json'
+    # -d '{"movie_name":"movie1"}'
+    # 'http://localhost:4000/api/movielist/v1.1/movies'
+
+    def destruct_movie_user(movie):
+
+        movie_id = movie.id
+        movie_name = movie.name
+        season_episode_details = {i.season: i.episode
+                                  for i in movie.info}
+        # TODO! question: i which order the value retrived from the db.
+        return {'movie_id': movie_id, 'name': movie_name,
+                'season_episode_details': season_episode_details}
+
+    if request.method == 'POST':
+        data = request.get_json()
+        # TODO!
+        # this isn't an efficient way to do this task
+        movies = Movie.query.all()
+        filtered_movies = [movie for movie in movies if re.search(
+            data['movie_name'], movie.name)]
+        return {movie.name: destruct_movie_user(movie) for movie in filtered_movies}
+
+        #
 
 
 @app.route('/api/movielist/v1.1/movies/<int:movie_id>', methods=['GET'])

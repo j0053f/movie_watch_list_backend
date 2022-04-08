@@ -1,0 +1,86 @@
+"""
+In [4]: from app import User, Movie, MovieUser, MovieInfo,MovieUserLog, db
+
+In [5]: u1 = User(name='yousef', email='usf.stdd@gmail.com',
+                  password_hash='password_hash')
+
+In [6]: db.session.add(u1)
+
+In [7]: db.session.commit()
+
+In [8]: m1 = Movie(name='matrix')
+
+In [9]: db.session.new
+Out[9]: IdentitySet([])
+
+In [10]: db.session.add(m1)
+
+In [11]: db.session.new
+Out[11]: IdentitySet([<None:matrix>])
+
+In [12]: db.session.commit()
+
+In [13]: m1
+Out[13]: <1:matrix>
+
+In [18]: mu = MovieUser(
+    user=u1, movie=m1, watched_season=0, watched_episode=0 )
+
+In [11]: mu
+Out[11]: <user-movie:None-None,<1:matrix>, season:0, episode:0 watched.>
+
+In [12]: m1
+Out[12]: <1:matrix>
+
+In [13]: db.session.add(mu)
+
+In [14]: db.session.commit()
+
+In [15]: db.session.new
+Out[15]: IdentitySet([])
+
+In [16]: u1
+Out[16]: <1:yousef>
+
+In [17]: u1.last_status
+Out[17]: [<user-movie:1-1,<1:matrix>, season:0, episode:0 watched.>]
+
+In [19]: mu.movie
+Out[19]: <1:matrix>
+
+In [20]: mu
+Out[20]: <user-movie:1-1,<1:matrix>, season:0, episode:0 watched.>
+
+In [21]: type(mu)
+Out[21]: app.MovieUser
+
+In [22]: u1.last_status
+Out[22]: [<user-movie:1-1,<1:matrix>, season:0, episode:0 watched.>]
+
+In [26]: type(u1.last_status[0])
+Out[26]: app.MovieUser
+
+In [27]: u1.last_status[0].movie
+Out[27]: <1:matrix>
+
+In [29]: mulog = MovieUserLog(
+    last_status=mu, current_season=1, current_episode=1)
+
+In [30]: mulog
+Out[30]: <MovieUserLog (transient 139832421025440)>
+
+In [31]: db.session.add(mulog)
+
+In [32]: db.session.new
+Out[32]: IdentitySet([<MovieUserLog (transient 139832409596160)>, <MovieUserLog (transient 139832421025440)>])
+
+In [33]: db.session.commit()
+
+In [34]: mulog.last_status
+Out[34]: <user-movie:1-1,<1:matrix>, season:0, episode:0 watched.>
+
+In [35]: mulog.last_status.user
+Out[35]: <1:yousef>
+
+
+"""
